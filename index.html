@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Orbital Cleanup Crew</title>
+    <meta charset="UTF-8">
+    <style>
+        /* Basic reset and full window setup */
+        html, body {
+            margin: 0; padding: 0; overflow: hidden; height: 100%;
+            background-color: #0c0c1e; /* Darker space blue */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Cleaner font */
+            color: white;
+        }
+        canvas {
+            display: block; width: 100vw; height: 100vh;
+            background: linear-gradient(to bottom, #1a1a3a, #0c0c1e 80%); /* Subtle gradient background */
+            cursor: none;
+            position: relative; /* Needed for z-index */
+            z-index: 0;
+        }
+
+        /* UI Elements */
+        #uiContainer {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            display: flex; justify-content: space-between; align-items: center;
+            pointer-events: none; z-index: 10;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+        }
+        #scoreInfo { font-size: 24px; font-weight: 500;}
+        #levelInfo { font-size: 18px; text-align: center; line-height: 1.3; }
+        #livesInfo { font-size: 24px; text-align: right; }
+
+        /* Intro Message Style */
+        #introMessage {
+            position: absolute;
+            top: 25%; /* Adjusted position */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            max-width: 550px;
+            font-size: calc(18px + 0.8vw); /* Slightly adjusted */
+            font-weight: 600;
+            color: #e8efff;
+            text-align: center;
+            z-index: 51;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+            padding: 20px;
+            background-color: rgba(20, 30, 60, 0.6); /* Slightly darker background */
+            border: 1px solid rgba(150, 180, 255, 0.2);
+            border-radius: 12px;
+            pointer-events: none;
+            opacity: 1;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Game State Messages (Centered) */
+        .gameStateMessage {
+            position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%);
+            font-size: calc(2vw + 3vh + 1vmin);
+            font-weight: bold;
+            text-align: center;
+            z-index: 50;
+            padding: 25px 35px;
+            border-radius: 15px;
+            pointer-events: none;
+            text-shadow: 3px 3px 5px rgba(0,0,0,0.7);
+            background-color: rgba(0, 0, 0, 0.7); /* Darker background */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+        }
+        .gameOver { color: #ff4d4d; } /* Slightly less harsh red */
+        .levelComplete { color: #adebad; } /* Softer green */
+
+        /* Footer Credits */
+        footer {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.45); /* Slightly more visible */
+            text-align: center;
+            z-index: 1;
+            pointer-events: auto; /* Allow clicking links */
+            width: 100%;
+        }
+        footer a {
+            color: rgba(180, 210, 255, 0.6); /* More visible links */
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+        footer a:hover {
+            color: rgba(220, 235, 255, 0.9);
+        }
+
+        /* Debug Panel Styles (No change needed) */
+        #debugPanel { position: absolute; top: 10px; right: 10px; background-color: rgba(0, 0, 0, 0.75); color: #0f0; padding: 15px; border: 1px solid #0a0; border-radius: 5px; font-family: monospace; font-size: 13px; line-height: 1.4; z-index: 100; display: none; min-width: 240px; max-height: 90vh; overflow-y: auto; }
+        #debugPanel h4 { margin-top: 0; margin-bottom: 10px; font-size: 14px; border-bottom: 1px solid #0a0; padding-bottom: 5px; color: #0f0; }
+        #debugPanel div { margin-bottom: 6px; white-space: nowrap; } #debugPanel span { color: #ff0; margin-left: 5px; } #debugPanel label { display: inline-block; width: 150px; color: #0f0; } #debugPanel input[type="number"] { width: 70px; background-color: #111; color: #0f0; border: 1px solid #0a0; padding: 3px; font-family: monospace; font-size: 12px; margin-left: 5px; } #debugPanel hr { border: none; border-top: 1px dashed #0a0; margin: 10px 0; }
+    </style>
+</head>
+<body>
+
+<div id="uiContainer">
+    <div id="scoreInfo">Score: 0</div>
+    <div id="levelInfo">Sector: 1<br>Target: 500</div>
+    <div id="livesInfo">Shields: ❤️❤️❤️</div>
+</div>
+
+<div id="introMessage">
+    Orbital Cleanup Crew!<br>Use your Tractor Beam (mouse) to collect falling Space Debris!
+</div>
+
+<div id="levelCompleteMessage" class="gameStateMessage levelComplete" style="display: none;">Sector Cleared!<br><span style="font-size: 0.5em;">Proceeding to next debris field...</span></div>
+<div id="gameOverMessage" class="gameStateMessage gameOver" style="display: none;">Debris Field Overwhelmed!<br><span style="font-size: 0.5em;">Refresh to Retry Mission</span></div>
+
+<div id="debugPanel">
+    <h4>Debug Panel (Toggle with `)</h4>
+    <div>Score: <span id="debugScore">0</span></div>
+    <div>Debris Count: <span id="debugDrops">0</span></div>
+    <div>Particles: <span id="debugParticles">0</span></div>
+    <div>Beam Size: <span id="debugSize">1.000</span></div>
+    <div>Beam Lag: <span id="debugSmoothing">0.180</span></div>
+    <div>Shields: <span id="debugLives">3</span></div>
+    <div>Sector: <span id="debugLevel">1</span></div>
+    <div>Target Score: <span id="debugTarget">500</span></div>
+    <hr>
+    <div><label for="inputSpawn">Spawn Interval (ms):</label><input type="number" id="inputSpawn" step="50" min="50"></div>
+    <div><label for="inputMaxDrops">Max Debris:</label><input type="number" id="inputMaxDrops" step="1" min="1"></div>
+    <div><label for="inputGrowth">Beam Growth Rate:</label><input type="number" id="inputGrowth" step="0.001" min="0" max="0.1"></div>
+    <div><label for="inputSmoothing">Initial Beam Lag:</label><input type="number" id="inputSmoothing" step="0.01" min="0.01" max="0.5"></div>
+    <div><label for="inputMinSmoothing">Min Beam Lag:</label><input type="number" id="inputMinSmoothing" step="0.005" min="0.01" max="0.2"></div>
+    <div><label for="inputMaxMult">Max Beam Size:</label><input type="number" id="inputMaxMult" step="0.1" min="1" max="10"></div>
+    <hr>
+    <div><label for="inputSpecialChance">Powerup Chance (%):</label><input type="number" id="inputSpecialChance" step="1" min="0" max="100"></div>
+    <div><label for="inputPowerupDuration">Powerup Duration (ms):</label><input type="number" id="inputPowerupDuration" step="500" min="1000"></div>
+    <div><label for="inputScoreMulti">Score Multiplier:</label><input type="number" id="inputScoreMulti" step="1" min="1"></div>
+    <div><label for="inputShrinkFactor">Beam Shrink Factor:</label><input type="number" id="inputShrinkFactor" step="0.05" min="0.1" max="1.0"></div>
+    <div><label for="inputGravity">Gravity Well Force:</label><input type="number" id="inputGravity" step="0.05" min="0" max="5.0"></div>
+    <div><label for="inputTailMulti">Beam Trail Multi:</label><input type="number" id="inputTailMulti" step="0.1" min="1" max="5"></div>
+    <hr>
+    <div><label for="inputDropSpeedMin">Debris Speed Min:</label><input type="number" id="inputDropSpeedMin" step="0.1" min="0.1"></div>
+    <div><label for="inputDropSpeedMax">Debris Speed Max:</label><input type="number" id="inputDropSpeedMax" step="0.1" min="0.2"></div>
+    <hr>
+    <div><em>Game Time:</em> <span id="debugGameTime">0</span>ms</div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<footer>
+    Made with ❤️ by <a href="https://www.linkedin.com/in/baditaflorin" target="_blank">Florin Badita</a> using Google Gemini
+    | <a href="https://github.com/baditaflorin/" target="_blank">GitHub</a>
+</footer>
+
+
+<script>
+    // --- Canvas & UI Elements ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreInfoElement = document.getElementById('scoreInfo');
+    const levelInfoElement = document.getElementById('levelInfo');
+    const livesInfoElement = document.getElementById('livesInfo');
+    const levelCompleteMessageElement = document.getElementById('levelCompleteMessage');
+    const gameOverMessageElement = document.getElementById('gameOverMessage');
+    const introMessageElement = document.getElementById('introMessage');
+
+    // --- Debug Panel Elements ---
+    const debugPanelElement = document.getElementById('debugPanel');
+    const debugScoreElement = document.getElementById('debugScore');
+    const debugDropsElement = document.getElementById('debugDrops');
+    const debugParticlesElement = document.getElementById('debugParticles');
+    const debugSizeElement = document.getElementById('debugSize');
+    const debugSmoothingElement = document.getElementById('debugSmoothing');
+    const debugLivesElement = document.getElementById('debugLives');
+    const debugLevelElement = document.getElementById('debugLevel');
+    const debugTargetElement = document.getElementById('debugTarget');
+    const debugGameTimeElement = document.getElementById('debugGameTime');
+    const inputSpawnElement = document.getElementById('inputSpawn');
+    const inputMaxDropsElement = document.getElementById('inputMaxDrops');
+    const inputGrowthElement = document.getElementById('inputGrowth');
+    const inputSmoothingElement = document.getElementById('inputSmoothing');
+    const inputMinSmoothingElement = document.getElementById('inputMinSmoothing');
+    const inputMaxMultElement = document.getElementById('inputMaxMult');
+    const inputSpecialChanceElement = document.getElementById('inputSpecialChance');
+    const inputPowerupDurationElement = document.getElementById('inputPowerupDuration');
+    const inputScoreMultiElement = document.getElementById('inputScoreMulti');
+    const inputShrinkFactorElement = document.getElementById('inputShrinkFactor');
+    const inputGravityElement = document.getElementById('inputGravity');
+    const inputTailMultiElement = document.getElementById('inputTailMulti');
+    const inputDropSpeedMinElement = document.getElementById('inputDropSpeedMin');
+    const inputDropSpeedMaxElement = document.getElementById('inputDropSpeedMax');
+
+
+    // --- Screen and Resize Handling ---
+    let screenWidth = window.innerWidth;
+    let screenHeight = window.innerHeight;
+    canvas.width = screenWidth;
+    canvas.height = screenHeight;
+
+    function handleResize() {
+        screenWidth = window.innerWidth;
+        screenHeight = window.innerHeight;
+        canvas.width = screenWidth;
+        canvas.height = screenHeight;
+        initializeStars(); // Reinitialize stars for new size
+        // Keep catcher/mouse within bounds
+        catcherX = Math.max(0, Math.min(screenWidth, catcherX));
+        catcherY = Math.max(0, Math.min(screenHeight, catcherY));
+        mouseX = catcherX;
+        mouseY = catcherY;
+        console.log(`Resized to ${screenWidth}x${screenHeight}`);
+    }
+    window.addEventListener('resize', handleResize);
+
+
+    // --- Game Constants & Tunable Variables ---
+    const DEBRIS_RADIUS = 14;
+    const DEBRIS_SPEED_MIN_INITIAL = 1.2; // Base min speed
+    const DEBRIS_SPEED_MAX_INITIAL = 3.5; // Base max speed
+    let DEBRIS_SPEED_MIN = DEBRIS_SPEED_MIN_INITIAL; // Current min speed
+    let DEBRIS_SPEED_MAX = DEBRIS_SPEED_MAX_INITIAL; // Current max speed
+    let DEBRIS_SPAWN_INTERVAL = 800; // Initial spawn interval
+    let MAX_DEBRIS = 25;
+    const COLORS = { "rust": "rgb(183, 65, 14)", "grey": "rgb(150, 150, 150)", "panel": "rgb(100, 140, 160)", "wire": "rgb(218, 165, 32)", "ice": "rgb(200, 240, 255)", "crystal": "rgb(180, 180, 255)" };
+    const COLOR_NAMES = Object.keys(COLORS);
+    const INITIAL_CATCHER_RADIUS = 20;
+    const TRAIL_LENGTH = 35;
+    let INITIAL_SMOOTHING = 0.18;
+    const MIN_SMOOTHING = 0.04;
+    const GROWTH_RATE = 0.018;
+    const MAX_CATCHER_MULTIPLIER = 3.5;
+    let SPECIAL_DROP_CHANCE = 0.1;
+    let POWERUP_DURATION = 7000;
+    let SCORE_MULTIPLIER = 3;
+    let SHRINK_FACTOR = 0.6;
+    let GRAVITY_FORCE = 0.8;
+    let TAIL_LENGTH_MULTIPLIER = 2.0;
+    const ACTIVATION_MESSAGE_DURATION = 2000;
+    const POWERUP_TYPES = ['tail', 'gravity', 'score', 'shrink', 'colorpop'];
+    const POWERUP_VISUALS = { tail: '~', gravity: '@', score: '$', shrink: '-', colorpop: '*' };
+    const PARTICLE_COUNT_FIREWORK = 30;
+    const PARTICLE_SPEED_FIREWORK = 4.5;
+    const PARTICLE_LIFE_FIREWORK = 65;
+    const LEVEL_COMPLETE_MSG_DURATION = 2500;
+    const MIN_SPAWN_INTERVAL = 150; // Absolute minimum spawn time
+    const DIFFICULTY_SCORE_BASE = 1.65; // Base for exponential score target increase
+    const DIFFICULTY_SPAWN_REDUCTION_BASE = 50; // Base reduction per level
+    const DIFFICULTY_SPAWN_REDUCTION_SCALING = 5; // Additional reduction scaling with level
+
+
+    // --- Game State Variables ---
+    let score = 0;
+    let mouseX = screenWidth / 2;
+    let mouseY = screenHeight - INITIAL_CATCHER_RADIUS * 3; // Start lower
+    let catcherX = mouseX;
+    let catcherY = mouseY;
+    let catcherSizeMultiplier = 1.0;
+    let currentSmoothing = INITIAL_SMOOTHING;
+    let trailPoints = [];
+    let debrisList = []; // Renamed from glowdrops
+    let particles = [];
+    let stars = [];
+    let lastSpawnTime = 0;
+    let gameTime = 0;
+    let lastFrameTime = 0;
+    let activePowerups = { tail: 0, gravity: 0, score: 0, shrink: 0 };
+    let powerupActivationMessage = { text: '', expiry: 0 };
+    let level = 1;
+    let targetScore = 500;
+    let lives = 3;
+    const MAX_LIVES = 3;
+    let isGameOver = false;
+    let isLevelComplete = false;
+    let levelCompleteDisplayEnd = 0;
+
+
+    // --- Setup Functions ---
+    function initializeStars() {
+        stars = [];
+        const starCount = Math.floor((screenWidth * screenHeight) / 4000); // Slightly more stars
+        for (let i = 0; i < starCount; i++) {
+            stars.push({
+                x: Math.random() * screenWidth,
+                y: Math.random() * screenHeight,
+                radius: Math.random() * 1.3 + 0.2, // Slightly brighter range
+                alpha: Math.random() * 0.5 + 0.15 // Slightly more visible range
+            });
+        }
+    }
+
+    function createDebris() {
+        const colorName = COLOR_NAMES[Math.floor(Math.random() * COLOR_NAMES.length)];
+        let type = 'normal';
+        if (Math.random() < SPECIAL_DROP_CHANCE) {
+            type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
+        }
+        const isSpecial = type !== 'normal';
+        return {
+            id: Date.now() + Math.random(),
+            x: Math.random() * (screenWidth - DEBRIS_RADIUS * 2) + DEBRIS_RADIUS,
+            y: -DEBRIS_RADIUS * 2,
+            radius: DEBRIS_RADIUS * (Math.random() * 0.2 + 0.9) * (isSpecial ? 1.15 : 1), // Size variation
+            colorName: colorName,
+            colorRgb: COLORS[colorName],
+            speed: Math.random() * (DEBRIS_SPEED_MAX - DEBRIS_SPEED_MIN) + DEBRIS_SPEED_MIN, // Use current speeds
+            rotation: Math.random() * Math.PI * 2,
+            rotationSpeed: (Math.random() - 0.5) * 0.04 * (isSpecial ? 1.5 : 1),
+            type: type,
+        };
+    }
+
+    function createFireworks(x, y, baseColor) {
+        const hue = Math.random() * 360;
+        const count = (baseColor === 'gold' || baseColor === 'white') ? PARTICLE_COUNT_FIREWORK * 1.5 : PARTICLE_COUNT_FIREWORK;
+        for (let i = 0; i < count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * PARTICLE_SPEED_FIREWORK + 1.5; // Slightly higher min speed
+            const life = PARTICLE_LIFE_FIREWORK * (Math.random() * 0.5 + 0.6); // Slightly longer min life
+            let particleColor = `hsl(${hue + (Math.random() - 0.5) * 60}, 100%, ${Math.random() * 30 + 60}%)`;
+            if (baseColor === 'gold') particleColor = `hsl(${40 + Math.random()*20}, 100%, ${60 + Math.random()*20}%)`;
+            if (baseColor === 'white') particleColor = `hsl(0, 0%, ${80 + Math.random()*20}%)`;
+            particles.push({
+                x: x, y: y,
+                vx: Math.cos(angle) * speed * (Math.random()*0.5+0.5),
+                vy: Math.sin(angle) * speed * (Math.random()*0.5+0.5) - 0.5, // Slight upward bias initially
+                life: life, maxLife: life, color: particleColor,
+                radius: Math.random() * 2.5 + 1.5, // Slightly larger particles
+                gravity: 0.04, fades: true
+            });
+        }
+    }
+
+    function lerp(start, end, amount) {
+        return start + (end - start) * amount;
+    }
+
+
+    // --- Debug Panel Functions ---
+    function toggleDebugPanel(event) {
+        if (event.key === '`') {
+            event.preventDefault();
+            const isHidden = debugPanelElement.style.display === 'none';
+            debugPanelElement.style.display = isHidden ? 'block' : 'none';
+        }
+    }
+    function updateDebugPanel() {
+        if (debugPanelElement.style.display !== 'none') {
+            debugScoreElement.textContent = score;
+            debugDropsElement.textContent = debrisList.length; // Updated name
+            debugParticlesElement.textContent = particles.length;
+            debugSizeElement.textContent = catcherSizeMultiplier.toFixed(3);
+            debugSmoothingElement.textContent = currentSmoothing.toFixed(3);
+            debugLivesElement.textContent = lives;
+            debugLevelElement.textContent = level;
+            debugTargetElement.textContent = targetScore;
+            debugGameTimeElement.textContent = Math.floor(gameTime);
+            // Display current dynamic values
+            inputDropSpeedMinElement.value = DEBRIS_SPEED_MIN.toFixed(1);
+            inputDropSpeedMaxElement.value = DEBRIS_SPEED_MAX.toFixed(1);
+            inputSpawnElement.value = DEBRIS_SPAWN_INTERVAL;
+        }
+    }
+    function setupDebugInputs() {
+        // Set initial values from constants/variables
+        inputSpawnElement.value = DEBRIS_SPAWN_INTERVAL;
+        inputMaxDropsElement.value = MAX_DEBRIS;
+        inputGrowthElement.value = GROWTH_RATE;
+        inputSmoothingElement.value = INITIAL_SMOOTHING;
+        inputMinSmoothingElement.value = MIN_SMOOTHING;
+        inputMaxMultElement.value = MAX_CATCHER_MULTIPLIER;
+        inputSpecialChanceElement.value = SPECIAL_DROP_CHANCE * 100;
+        inputPowerupDurationElement.value = POWERUP_DURATION;
+        inputScoreMultiElement.value = SCORE_MULTIPLIER;
+        inputShrinkFactorElement.value = SHRINK_FACTOR;
+        inputGravityElement.value = GRAVITY_FORCE;
+        inputTailMultiElement.value = TAIL_LENGTH_MULTIPLIER;
+        inputDropSpeedMinElement.value = DEBRIS_SPEED_MIN;
+        inputDropSpeedMaxElement.value = DEBRIS_SPEED_MAX;
+
+        // Add listeners to update variables (be cautious with dynamic ones)
+        inputSpawnElement.addEventListener('change', (e) => { const val = parseInt(e.target.value, 10); if (!isNaN(val) && val >= 50) DEBRIS_SPAWN_INTERVAL = val; e.target.value = DEBRIS_SPAWN_INTERVAL; });
+        inputMaxDropsElement.addEventListener('change', (e) => { const val = parseInt(e.target.value, 10); if (!isNaN(val) && val >= 1) MAX_DEBRIS = val; e.target.value = MAX_DEBRIS; });
+        inputGrowthElement.addEventListener('change', (e) => { const val = parseFloat(e.target.value); if (!isNaN(val) && val >= 0) GROWTH_RATE = val; e.target.value = GROWTH_RATE.toFixed(3); });
+        inputSmoothingElement.addEventListener('change', (e) => { const val = parseFloat(e.target.value); if (!isNaN(val) && val >= 0.01 && val <= 0.5) INITIAL_SMOOTHING = val; e.target.value = INITIAL_SMOOTHING.toFixed(2); });
+        inputMinSmoothingElement.addEventListener('change', (e) => { const val = parseFloat(e.target.value); if (!isNaN(val) && val >= 0.01 && val <= 0.2) MIN_SMOOTHING = val; e.target.value = MIN_SMOOTHING.toFixed(3); });
+        inputMaxMultElement.addEventListener('change', (e) => { const val = parseFloat(e.target.value); if (!isNaN(val) && val >= 1.0) MAX_CATCHER_MULTIPLIER = val; e.target.value = MAX_CATCHER_MULTIPLIER.toFixed(1); });
+        inputSpecialChanceElement.addEventListener('change', (e) => { const val = parseFloat(e.target.value); if (!isNaN(val) && val >= 0 && val <= 100) SPECIAL_DROP_CHANCE = val / 100; e.target.value = (SPECIAL_DROP_CHANCE * 100).toFixed(1); });
+        inputPowerupDurationElement.addEventListener('change', (e) => { const val = parseInt(e.target.value, 10); if (!isNaN(val) && val >= 1000) POWERUP_DURATION = val; e.target.value = POWERUP_DURATION; });
+        inputScoreMultiElement.addEventListener('change', (e) => { const val = parseInt(e.target.value, 10); if (!isNaN(val) && val >= 1) SCORE_MULTIPLIER = val; e.target.value = SCORE_MULTIPLIER; });
+        inputShrinkFactorElement.addEventListener('change', (e) => { const val = parseFloat(e.target.value); if (!isNaN(val) && val >= 0.1 && val <= 1.0) SHRINK_FACTOR = val; e.target.value = SHRINK_FACTOR.toFixed(2); });
+        inputGravityElement.addEventListener('change', (e) => { const val = parseFloat(e.target.value); if (!isNaN(val) && val >= 0) GRAVITY_FORCE = val; e.target.value = GRAVITY_FORCE.toFixed(2); });
+        inputTailMultiElement.addEventListener('change', (e) => { const val = parseFloat(e.target.value); if (!isNaN(val) && val >= 1.0) TAIL_LENGTH_MULTIPLIER = val; e.target.value = TAIL_LENGTH_MULTIPLIER.toFixed(1); });
+        // Note: Changing min/max speed here might conflict with level progression
+        inputDropSpeedMinElement.addEventListener('change', (e) => { const val = parseFloat(e.target.value); if (!isNaN(val) && val >= 0.1) DEBRIS_SPEED_MIN = val; e.target.value = DEBRIS_SPEED_MIN.toFixed(1); });
+        inputDropSpeedMaxElement.addEventListener('change', (e) => { const val = parseFloat(e.target.value); if (!isNaN(val) && val >= 0.2) DEBRIS_SPEED_MAX = val; e.target.value = DEBRIS_SPEED_MAX.toFixed(1); });
+    }
+
+
+    // --- Game Loop ---
+    function gameLoop(currentTime) {
+        if (!lastFrameTime) { lastFrameTime = currentTime; }
+        const deltaTime = Math.min(0.05, (currentTime - lastFrameTime) / 1000); // Clamp delta time to prevent large jumps
+        lastFrameTime = currentTime;
+        gameTime = currentTime; // Use for animations etc.
+
+        update(currentTime, deltaTime);
+        draw(currentTime);
+        updateDebugPanel();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+
+    // --- Update Function ---
+    function update(currentTime, deltaTime) {
+        // If game is over, only update particles
+        if (isGameOver) {
+            particles.forEach((p, i) => {
+                p.x += p.vx * deltaTime * 60;
+                p.y += p.vy * deltaTime * 60;
+                if (p.gravity) { p.vy += p.gravity * deltaTime * 60; }
+                p.life -= deltaTime * 60;
+                if (p.life <= 0) { particles.splice(i, 1); }
+            });
+            return;
+        }
+
+        // Handle Sector Complete message display
+        if (isLevelComplete && currentTime > levelCompleteDisplayEnd) {
+            isLevelComplete = false;
+            levelCompleteMessageElement.style.display = 'none';
+        }
+        // If level complete message is showing, pause game logic (except particles)
+        if (isLevelComplete) {
+            particles.forEach((p, i) => {
+                p.x += p.vx * deltaTime * 60;
+                p.y += p.vy * deltaTime * 60;
+                if (p.gravity) { p.vy += p.gravity * deltaTime * 60; }
+                p.life -= deltaTime * 60;
+                if (p.life <= 0) { particles.splice(i, 1); }
+            });
+            return; // Skip rest of update
+        }
+
+
+        // --- Normal Update Logic ---
+        const isTailActive = activePowerups.tail > currentTime;
+        const isGravityActive = activePowerups.gravity > currentTime;
+        const isScoreFrenzyActive = activePowerups.score > currentTime;
+        const isShrinkActive = activePowerups.shrink > currentTime;
+
+        let currentSizeMultiplier = catcherSizeMultiplier * (isShrinkActive ? SHRINK_FACTOR : 1);
+        let currentTrailTargetLength = TRAIL_LENGTH * (isTailActive ? TAIL_LENGTH_MULTIPLIER : 1);
+        // Adjust smoothing based on size, preventing extreme lag when small
+        let effectiveSizeForSmoothing = Math.max(0.5, currentSizeMultiplier); // Clamp min size influence
+        currentSmoothing = Math.min(INITIAL_SMOOTHING * 1.5, Math.max(MIN_SMOOTHING, INITIAL_SMOOTHING / (1 + (effectiveSizeForSmoothing - 1) * 0.7)));
+
+        // Smoothly move catcher towards mouse
+        catcherX = lerp(catcherX, mouseX, 1 - Math.pow(1 - currentSmoothing, deltaTime * 60));
+        catcherY = lerp(catcherY, mouseY, 1 - Math.pow(1 - currentSmoothing, deltaTime * 60));
+
+        // Add current point to trail and manage length
+        trailPoints.push({ x: catcherX, y: catcherY, time: currentTime });
+        while (trailPoints.length > currentTrailTargetLength) {
+            trailPoints.shift();
+        }
+
+        // Spawn Debris
+        if (currentTime - lastSpawnTime > DEBRIS_SPAWN_INTERVAL && debrisList.length < MAX_DEBRIS) {
+            debrisList.push(createDebris());
+            lastSpawnTime = currentTime;
+        }
+
+        // Move and check collision for each debris item
+        const currentTrailEffectiveWidth = (INITIAL_CATCHER_RADIUS * 1.8) * currentSizeMultiplier; // Width of the beam's catch area
+
+        for (let i = debrisList.length - 1; i >= 0; i--) {
+            const debris = debrisList[i];
+            let caught = false;
+
+            // Apply Gravity Well effect (if active and debris is normal type)
+            if (isGravityActive && debris.type === 'normal') {
+                const dx = catcherX - debris.x;
+                const dy = catcherY - debris.y;
+                const distSq = dx * dx + dy * dy;
+                const gravityRadius = screenHeight * 0.4;
+                const gravityRadiusSq = gravityRadius * gravityRadius;
+
+                if (distSq < gravityRadiusSq && distSq > 50) { // Avoid extreme force near center
+                    const dist = Math.sqrt(distSq);
+                    // Force falls off with distance, stronger closer in
+                    const forceMagnitude = GRAVITY_FORCE * 1000 * (gravityRadius - dist) / gravityRadius;
+                    // Apply force adjusted by deltaTime
+                    debris.x += (dx / dist) * forceMagnitude * deltaTime;
+                    debris.y += (dy / dist) * forceMagnitude * deltaTime;
+                }
+            }
+
+            // Normal Debris Movement (downwards + rotation)
+            debris.y += debris.speed * deltaTime * 60; // Adjust speed by frame rate
+            debris.rotation += debris.rotationSpeed * deltaTime * 60;
+
+            // Collision Check (Check against catcher trail points)
+            for (let j = trailPoints.length - 1; j >= 0; j--) {
+                const p1 = trailPoints[j];
+                const dx = debris.x - p1.x;
+                const dy = debris.y - p1.y;
+                const distSq = dx * dx + dy * dy;
+                const catchRadius = (currentTrailEffectiveWidth / 2) + debris.radius; // Radius of beam segment + debris radius
+                const catchRadiusSq = catchRadius * catchRadius;
+
+                if (distSq < catchRadiusSq) {
+                    // --- CATCH ---
+                    if (debris.type === 'normal') {
+                        const pointsToAdd = isScoreFrenzyActive ? 10 * SCORE_MULTIPLIER : 10;
+                        score += pointsToAdd;
+                        catcherSizeMultiplier = Math.min(MAX_CATCHER_MULTIPLIER, catcherSizeMultiplier + GROWTH_RATE);
+                        createFireworks(debris.x, debris.y, debris.colorRgb);
+                    } else { // Caught a Powerup Module
+                        let activationText = '';
+                        if (debris.type === 'colorpop') {
+                            activationText = 'MATERIAL SYNC!';
+                            let poppedCount = 0;
+                            for (let k = debrisList.length - 1; k >= 0; k--) {
+                                if (i === k || debrisList[k].type !== 'normal' || debrisList[k].colorName !== debris.colorName) continue;
+                                createFireworks(debrisList[k].x, debrisList[k].y, debrisList[k].colorRgb);
+                                score += 5; // Bonus score for popped items
+                                debrisList.splice(k, 1);
+                                poppedCount++;
+                                if (k < i) i--; // Adjust index if we removed an item before current one
+                            }
+                            createFireworks(debris.x, debris.y, 'white'); // Special effect for the pop trigger
+                        } else {
+                            // Standard powerup activation
+                            activationText = `${debris.type.toUpperCase()} BOOST!`;
+                            activePowerups[debris.type] = currentTime + POWERUP_DURATION;
+                            createFireworks(debris.x, debris.y, 'gold'); // Gold effect for powerups
+                        }
+                        powerupActivationMessage = { text: activationText, expiry: currentTime + ACTIVATION_MESSAGE_DURATION };
+                    }
+                    debrisList.splice(i, 1); // Remove caught debris
+                    caught = true;
+
+                    // --- Check for Sector Clear ---
+                    if (score >= targetScore) {
+                        isLevelComplete = true;
+                        levelCompleteDisplayEnd = currentTime + LEVEL_COMPLETE_MSG_DURATION;
+                        levelCompleteMessageElement.style.display = 'block';
+
+                        // Increase difficulty for next level
+                        level++;
+                        // Exponential target score
+                        targetScore = Math.floor(500 * Math.pow(DIFFICULTY_SCORE_BASE, level - 1));
+                        lives = Math.min(MAX_LIVES, lives + 1); // Restore one shield
+
+                        // Increase speed
+                        DEBRIS_SPEED_MIN += 0.18; // Steeper speed increase
+                        DEBRIS_SPEED_MAX += 0.22; // Steeper speed increase
+
+                        // Decrease spawn interval
+                        DEBRIS_SPAWN_INTERVAL = Math.max(MIN_SPAWN_INTERVAL, DEBRIS_SPAWN_INTERVAL - (DIFFICULTY_SPAWN_REDUCTION_BASE + level * DIFFICULTY_SPAWN_REDUCTION_SCALING));
+
+                        console.log(`Sector Cleared! Sector: ${level}, Target: ${targetScore}, Speed: ${DEBRIS_SPEED_MIN.toFixed(1)}-${DEBRIS_SPEED_MAX.toFixed(1)}, Spawn: ${DEBRIS_SPAWN_INTERVAL}`);
+                    }
+                    break; // Exit collision check loop for this debris
+                }
+                // Optimization: if debris is way above the current trail point, stop checking older points
+                if (debris.y < p1.y - catchRadius * 2) break;
+            }
+
+            // --- Missed Debris (Fell past the bottom) ---
+            if (!caught && debris.y - debris.radius > screenHeight) {
+                debrisList.splice(i, 1); // Remove missed debris
+                lives--; // Shield integrity down!
+                console.log(`Shield Hit! Shields remaining: ${lives}`);
+                // Add screen shake or visual effect for shield hit? (Optional)
+
+                if (lives <= 0) {
+                    isGameOver = true;
+                    gameOverMessageElement.style.display = 'block';
+                    console.log("GAME OVER - Debris Field Overwhelmed");
+                    // Potentially trigger more dramatic game over effects
+                }
+            }
+        }
+
+        // Update particles
+        particles.forEach((p, i) => {
+            p.x += p.vx * deltaTime * 60;
+            p.y += p.vy * deltaTime * 60;
+            if (p.gravity) { p.vy += p.gravity * deltaTime * 60; }
+            p.life -= deltaTime * 60;
+            if (p.life <= 0) { particles.splice(i, 1); }
+        });
+    }
+
+
+    // --- Draw Function ---
+    function draw(currentTime) {
+        const isTailActive = activePowerups.tail > currentTime;
+        const isGravityActive = activePowerups.gravity > currentTime;
+        const isScoreFrenzyActive = activePowerups.score > currentTime;
+        const isShrinkActive = activePowerups.shrink > currentTime;
+
+        const currentSizeMultiplier = catcherSizeMultiplier * (isShrinkActive ? SHRINK_FACTOR : 1);
+        // Add pulsing effect to catcher radius for visual flair
+        const pulse = Math.sin(currentTime * 0.008) * 0.06 + 0.97;
+        const currentCatcherDisplayRadius = (INITIAL_CATCHER_RADIUS * currentSizeMultiplier) * pulse;
+        const currentTrailDisplayLength = TRAIL_LENGTH * (isTailActive ? TAIL_LENGTH_MULTIPLIER : 1);
+
+        // Clear canvas
+        ctx.clearRect(0, 0, screenWidth, screenHeight);
+
+        // Draw stars (background)
+        stars.forEach(star => {
+            // Twinkle effect
+            const twinkle = Math.sin(currentTime * 0.0008 + star.x * 0.1 + star.y * 0.05) * 0.3 + 0.7;
+            ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha * twinkle})`;
+            ctx.beginPath();
+            ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // --- Draw Enhanced Earth Segment ---
+        const earthVisualRadius = screenWidth * 1.8; // Large radius for subtle curve
+        const earthCenterX = screenWidth / 2;
+        const earthVisibleHeight = screenHeight * 0.18; // How much of Earth is visible
+        const earthCenterY = screenHeight + earthVisualRadius - earthVisibleHeight;
+
+        ctx.save();
+
+        // 1. Atmosphere Glow (applied before main fill)
+        ctx.shadowColor = 'rgba(120, 180, 255, 0.5)'; // Slightly softer glow
+        ctx.shadowBlur = 80; // Wider, softer glow
+
+        // 2. Earth Base (Oceans/Basic Color)
+        ctx.beginPath();
+        ctx.arc(earthCenterX, earthCenterY, earthVisualRadius, Math.PI, 0); // Draw arc across the bottom
+        ctx.closePath(); // Close path to fill
+
+        const earthGrad = ctx.createRadialGradient(
+            earthCenterX, earthCenterY - earthVisualRadius * 0.3, earthVisualRadius * 0.4, // Inner gradient higher
+            earthCenterX, earthCenterY, earthVisualRadius
+        );
+        // Gradient with hints of green
+        earthGrad.addColorStop(0, 'rgba(100, 180, 240, 1)');   // Lighter blue center
+        earthGrad.addColorStop(0.6, 'rgba(70, 140, 200, 1)');  // Mid blue
+        earthGrad.addColorStop(0.8, 'rgba(50, 110, 160, 1)');  // Deeper blue
+        earthGrad.addColorStop(0.9, 'rgba(40, 90, 80, 1)');   // Hint of deep green/blue
+        earthGrad.addColorStop(0.98, 'rgba(20, 50, 100, 1)');  // Dark blue edge
+        earthGrad.addColorStop(1, 'rgba(10, 25, 50, 1)');     // Very dark space edge
+        ctx.fillStyle = earthGrad;
+
+        ctx.fill(); // Fill with the base gradient and apply shadowBlur
+
+        // Restore shadow settings before drawing details on top
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+
+        // 3. Cloud Layer (using clip path)
+        ctx.clip(); // Clip subsequent drawings (clouds) to the Earth arc path
+
+        const cloudTimeOffset = currentTime * 0.00004; // Slow horizontal drift speed
+        ctx.fillStyle = 'rgba(255, 255, 255, 1)'; // Base cloud color (opacity handled by globalAlpha)
+
+        for (let i = 0; i < 18; i++) { // Number of cloud puffs
+            // Use consistent pseudo-random values based on index 'i' for stable cloud structure
+            const seed = i * 137; // Simple seed based on index
+            const baseX = ((seed * 0.13) % 1.0) * screenWidth * 1.2 - screenWidth * 0.1; // Spread across wider than screen for wrap
+            const baseY = screenHeight - earthVisibleHeight * ( ((seed * 37) % 100) / 100 * 0.9 + 0.05); // Y position within visible arc
+            const sizeX = screenWidth * ( ((seed * 19) % 50) / 100 * 0.08 + 0.04); // Size X
+            const sizeY = sizeX * ( ((seed * 23) % 30) / 100 * 0.4 + 0.3); // Size Y ratio
+            const rotation = ((seed * 0.1) % Math.PI); // Tilt
+
+            // Apply drift - wrap around screen edges smoothly
+            let drawX = (baseX + cloudTimeOffset * screenWidth) % (screenWidth * 1.2);
+            if (drawX < -screenWidth * 0.1) drawX += screenWidth * 1.2; // Wrap correction
+
+            // Vary opacity for depth
+            ctx.globalAlpha = 0.15 + ( ((seed * 41) % 70) / 100) * 0.4; // Range from 0.15 to 0.55
+
+            ctx.beginPath();
+            ctx.ellipse(drawX, baseY, sizeX, sizeY, rotation, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1.0; // Reset global alpha
+
+        ctx.restore(); // Restore context (removes clipping path)
+        // --- End Enhanced Earth Segment ---
+
+
+        // --- Draw Tractor Beam Trail --- (Draws over Earth)
+        const baseTrailVisualWidth = (INITIAL_CATCHER_RADIUS * 1.8) * currentSizeMultiplier;
+        if (trailPoints.length > 1) {
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            const startIndex = Math.max(0, trailPoints.length - Math.floor(currentTrailDisplayLength));
+            for (let i = startIndex; i < trailPoints.length - 1; i++) {
+                const p1 = trailPoints[i];
+                const p2 = trailPoints[i + 1];
+                const relativeIndex = i - startIndex;
+                const visibleTrailLength = Math.max(1, trailPoints.length - startIndex - 1);
+                const ratio = Math.max(0, relativeIndex / visibleTrailLength); // Gradient ratio
+                const currentVisualWidth = baseTrailVisualWidth * (0.3 + ratio * 0.7); // Tapered width
+                ctx.lineWidth = currentVisualWidth;
+
+                const gradient = ctx.createLinearGradient(p1.x, p1.y, p2.x, p2.y);
+                const baseAlpha = ratio * 0.5 + 0.1; // Base alpha for trail segments
+                if (isScoreFrenzyActive && Math.random() < 0.2) { // More frequent flicker during frenzy
+                    gradient.addColorStop(0, `rgba(255, 255, 120, ${baseAlpha * 1.2 + 0.2})`);
+                    gradient.addColorStop(1, `rgba(255, 255, 150, ${baseAlpha * 1.4 + 0.3})`);
+                } else {
+                    gradient.addColorStop(0, `rgba(180, 220, 255, ${baseAlpha})`); // Soft blue
+                    gradient.addColorStop(1, `rgba(200, 230, 255, ${baseAlpha * 1.2 + 0.1})`);
+                }
+                ctx.strokeStyle = gradient;
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+            }
+        }
+
+        // --- Draw Gravity Well Visual --- (Draws over Earth/Trail)
+        if (isGravityActive) {
+            const gravityRadius = screenHeight * 0.4;
+            const gravityRadiusSq = gravityRadius * gravityRadius; // Defined here now
+            ctx.beginPath();
+            ctx.arc(catcherX, catcherY, gravityRadius, 0, Math.PI * 2);
+            const grad = ctx.createRadialGradient(catcherX, catcherY, currentCatcherDisplayRadius, catcherX, catcherY, gravityRadius);
+            grad.addColorStop(0, 'rgba(210, 190, 255, 0)'); // Transparent near catcher
+            grad.addColorStop(0.7, 'rgba(210, 190, 255, 0.04)'); // Faint purple mid
+            grad.addColorStop(1, 'rgba(210, 190, 255, 0.08)'); // Slightly stronger outer edge
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            // Draw subtle lines to affected debris
+            ctx.strokeStyle = 'rgba(210, 190, 255, 0.15)'; // Faint lines
+            ctx.lineWidth = 0.5; // Thin lines
+            debrisList.forEach(debris => {
+                if (debris.type === 'normal') { // Only affect normal debris
+                    const dx = catcherX - debris.x;
+                    const dy = catcherY - debris.y;
+                    const distSq = dx*dx + dy*dy;
+                    if (distSq < gravityRadiusSq) {
+                        ctx.beginPath();
+                        ctx.moveTo(catcherX, catcherY);
+                        ctx.lineTo(debris.x, debris.y);
+                        ctx.stroke();
+                    }
+                }
+            });
+        }
+
+        // --- Draw Tractor Beam Catcher --- (Draws over Earth/Trail)
+        const catcherGradient = ctx.createRadialGradient(catcherX, catcherY, 0, catcherX, catcherY, currentCatcherDisplayRadius);
+        catcherGradient.addColorStop(0, 'rgba(230, 245, 255, 1)'); // Brighter core
+        catcherGradient.addColorStop(0.4, 'rgba(200, 230, 255, 0.9)'); // Mid glow
+        catcherGradient.addColorStop(1, 'rgba(150, 200, 255, 0)'); // Fades out
+        ctx.fillStyle = catcherGradient;
+        ctx.shadowColor = 'rgba(180, 220, 255, 0.7)'; // Catcher glow
+        ctx.shadowBlur = currentCatcherDisplayRadius * 0.9; // Slightly wider glow
+        ctx.beginPath();
+        ctx.arc(catcherX, catcherY, currentCatcherDisplayRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw energy tendrils/spikes
+        const numPoints = 6 + Math.floor(currentSizeMultiplier * 1.5); // More points as it grows
+        ctx.lineWidth = Math.max(1, 2 * currentSizeMultiplier * 0.6); // Tendril thickness
+        for (let i = 0; i < numPoints; i++) {
+            const angle = (i / numPoints) * Math.PI * 2 + currentTime * 0.003; // Slightly faster rotation
+            const lenVariation = Math.sin(currentTime * 0.018 + i * 1.5) * 0.15 + 1.2; // More dynamic length
+            const len = currentCatcherDisplayRadius * lenVariation;
+            const alphaVariation = Math.sin(currentTime * 0.012 + i * 1.2) * 0.3 + 0.6; // Pulsing alpha
+            ctx.strokeStyle = `rgba(200, 230, 255, ${alphaVariation})`;
+            ctx.beginPath();
+            ctx.moveTo(catcherX, catcherY);
+            ctx.lineTo(catcherX + Math.cos(angle) * len, catcherY + Math.sin(angle) * len);
+            ctx.stroke();
+        }
+        ctx.shadowBlur = 0; // Reset shadow for next elements
+
+        // --- Draw Debris --- (Draws over Earth/Catcher)
+        debrisList.forEach(debris => {
+            ctx.save();
+            ctx.translate(debris.x, debris.y);
+            ctx.rotate(debris.rotation);
+            const radius = debris.radius;
+
+            const gradient = ctx.createRadialGradient(0, 0, radius * 0.1, 0, 0, radius);
+            const baseColor = debris.colorRgb;
+            const match = baseColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+            let shadowColor = baseColor;
+            if(match){
+                const[_,r,g,b]=match;
+                // Make gradient slightly brighter in center
+                gradient.addColorStop(0, `rgba(${Math.min(255,parseInt(r)+30)},${Math.min(255,parseInt(g)+30)},${Math.min(255,parseInt(b)+30)},1)`);
+                gradient.addColorStop(0.6, `rgba(${r},${g},${b},0.95)`);
+                gradient.addColorStop(1, `rgba(${r},${g},${b},0.6)`);
+                shadowColor = `rgba(${r},${g},${b},0.7)`;
+            } else {
+                gradient.addColorStop(0, baseColor);
+                gradient.addColorStop(1, baseColor);
+            }
+
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
+            ctx.shadowColor = shadowColor;
+            ctx.shadowBlur = 5; // Subtle glow around debris
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Powerup visuals
+            if (debris.type !== 'normal') {
+                const pulseAlpha = Math.sin(currentTime * 0.006 + debris.id) * 0.4 + 0.6; // Stronger pulse
+                ctx.strokeStyle = `rgba(255, 255, 200, ${pulseAlpha})`; // Gold outline
+                ctx.lineWidth = 2;
+                ctx.shadowColor = 'rgba(255, 220, 0, 0.8)'; // Yellow shadow
+                ctx.shadowBlur = 6;
+                ctx.stroke(); // Draw the outline
+
+                const symbol = POWERUP_VISUALS[debris.type] || '?';
+                ctx.fillStyle = `rgba(255, 255, 240, ${pulseAlpha})`; // Bright symbol
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = `bold ${radius * 1.3}px sans-serif`; // Slightly larger symbol
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                ctx.shadowBlur = 3;
+                ctx.fillText(symbol, 0, radius * 0.05); // Adjust vertical position slightly
+            }
+            ctx.restore();
+        });
+        ctx.shadowBlur = 0; // Ensure shadow is off
+
+        // Draw Particles (Draw over debris)
+        particles.forEach(p => {
+            const alpha = p.life / p.maxLife;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, Math.max(0.5, p.radius * alpha), 0, Math.PI * 2); // Ensure min radius
+
+            // Handle HSL and RGB colors with fading alpha
+            if (p.color.startsWith('hsl')) {
+                const match = p.color.match(/hsl\((\d+\.?\d*),\s*(\d+)%,\s*(\d+)%\)/);
+                if (match) {
+                    const [_, h, s, l] = match;
+                    // Fade lightness towards a mid-grey instead of just white/black
+                    const fadedL = parseFloat(l) * alpha + 50 * (1 - alpha);
+                    ctx.fillStyle = `hsla(${h},${s}%,${fadedL}%,${alpha})`;
+                } else {
+                    ctx.fillStyle = p.color; // Fallback
+                }
+            } else if (p.color.startsWith('rgb')) {
+                const match = p.color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+                if (match) {
+                    ctx.fillStyle = `rgba(${match[1]},${match[2]},${match[3]},${p.fades ? alpha : 1})`;
+                } else {
+                    ctx.fillStyle = p.color; // Fallback
+                }
+            } else {
+                ctx.fillStyle = p.color; // Fallback for non-rgb/hsl
+            }
+            ctx.fill();
+        });
+
+        // --- Draw Powerup Activation Text --- (Draw near top)
+        if (powerupActivationMessage.expiry > currentTime) {
+            const remainingTime = powerupActivationMessage.expiry - currentTime;
+            const remainingRatio = Math.max(0, remainingTime / ACTIVATION_MESSAGE_DURATION);
+            // Use a curve for alpha (fade in/out) and size (pop effect)
+            const scale = 1.0 + Math.sin(remainingRatio * Math.PI) * 0.2; // Pop effect
+            const alpha = Math.sin(remainingRatio * Math.PI); // Fade in/out smoothly
+
+            const baseFontSize = Math.min(screenWidth, screenHeight) / 12; // Base size relative to screen
+            const fontSize = baseFontSize * scale;
+
+            ctx.font = `bold ${fontSize}px 'Segoe UI', Tahoma, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // Bright yellow text with dark outline
+            ctx.fillStyle = `rgba(255, 255, 100, ${alpha * 0.95})`;
+            ctx.strokeStyle = `rgba(0, 0, 0, ${alpha * 0.7})`;
+            ctx.lineWidth = Math.max(1, fontSize / 25); // Outline thickness scales
+
+            ctx.strokeText(powerupActivationMessage.text, screenWidth / 2, screenHeight * 0.25); // Positioned higher
+            ctx.fillText(powerupActivationMessage.text, screenWidth / 2, screenHeight * 0.25);
+        }
+
+        // --- Draw UI --- (On top of everything else)
+        scoreInfoElement.textContent = `Score: ${score}`;
+        levelInfoElement.innerHTML = `Sector: ${level}<br>Target: ${targetScore}`;
+        // Use text for shields if emojis cause issues, or use filled/empty circles
+        livesInfoElement.textContent = `Shields: ${'❤️'.repeat(lives)}${' '.repeat(MAX_LIVES - lives)}`; // Use space or empty heart '🖤'
+
+        // Draw Active Powerup Timers (Bottom Right)
+        let yOffset = screenHeight - 25; // Start position for timers
+        ctx.font = 'bold 15px monospace'; // Slightly smaller monospace font
+        ctx.textAlign = 'right';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4; // Stronger shadow for readability
+        for (const type in activePowerups) {
+            if (activePowerups[type] > currentTime) {
+                const remaining = ((activePowerups[type] - currentTime) / 1000).toFixed(1);
+                let displayColor = 'rgba(255, 255, 255, 0.95)'; // Default white
+                // Specific colors for each powerup type
+                if (type === 'score') displayColor = 'rgba(255, 255, 120, 0.95)'; // Yellow
+                if (type === 'gravity') displayColor = 'rgba(210, 190, 255, 0.95)'; // Purple
+                if (type === 'tail') displayColor = 'rgba(160, 210, 255, 0.95)'; // Light Blue
+                if (type === 'shrink') displayColor = 'rgba(150, 255, 180, 0.95)'; // Light Green
+
+                ctx.fillStyle = displayColor;
+                ctx.fillText(`${type.toUpperCase()}: ${remaining}s`, screenWidth - 20, yOffset);
+                yOffset -= 22; // Spacing between timers
+            }
+        }
+        ctx.shadowBlur = 0; // Reset shadow
+    }
+
+
+    // --- Event Listeners ---
+    canvas.addEventListener('mousemove', function(event) {
+        mouseX = event.clientX;
+        mouseY = event.clientY;
+    });
+    window.addEventListener('keydown', toggleDebugPanel);
+
+
+    // --- Game Initialization ---
+    function initGame() {
+        console.log("Initializing Orbital Cleanup Crew...");
+        // Setup Intro Message Fadeout
+        setTimeout(() => {
+            introMessageElement.style.transition = 'opacity 1.2s ease-out'; // Slightly longer fade
+            introMessageElement.style.opacity = '0';
+            // Remove from layout after fade is complete
+            setTimeout(() => { introMessageElement.style.display = 'none'; }, 1200);
+        }, 5000); // Display for 5 seconds
+
+        setupDebugInputs();
+        initializeStars();
+        requestAnimationFrame(gameLoop); // Start the main game loop
+    }
+
+    // --- Start Game ---
+    initGame();
+
+</script>
+
+</body>
+</html>
